@@ -79,9 +79,14 @@ class TeacherClient:
                 frame_number+=1
 
     def recv_screenshots(self):
-        labelindex=0
         while True:
             data, server_addr = self.client_socket.recvfrom(65535)
+
+            if(data.split(b',')[0]==b'del'):
+                port=int(data.decode().split(',')[1])
+                self.root.after(0, self.handle_delete, port)
+            
+                continue
 
             # if data[0:7]==b"STUDENT":
             #     name=data.decode().split(',')[1]
@@ -90,13 +95,12 @@ class TeacherClient:
             port=int(port.decode())
 
             if port not in self.students_frames:
-                self.students_frames[port] = {"label":self.labels[labelindex]}
-                labelindex+=1
+                self.students_frames[port] = {"label":self.labels[len(self.students_frames)]}
 
 
             packet_number=int(packet_number.decode())
             frame_number=int(frame_number.decode())
-            length=int(length.decode())
+            length=int(length.decode()) 
 
 
             if frame_number not in self.students_frames[port]:
@@ -114,6 +118,45 @@ class TeacherClient:
 
                 del self.students_frames[port][frame_number]
 
+
+    def handle_delete(self, port):
+        # last_label.config(image="")
+        # last_label.image = None
+        del self.students_frames[port]
+        
+
+        for i,j in enumerate(self.students_frames):
+            self.students_frames[j]["label"] = self.labels[i]
+            # self.students_frames[j]['label'].grid(row=int(self.labels[i].grid_info()["row"]),column=self.labels[i].grid_info()['column'])
+            
+
+
+        self.labels[len(self.students_frames)].config(image="")
+        self.labels[len(self.students_frames)].image = None
+        # start =False
+
+        # cur_row=self.students_frames[port]['label'].grid_info()["row"]
+        # cur_column=self.students_frames[port]['label'].grid_info()["column"]
+
+        # for i,j in enumerate(self.students_frames):
+        #     #and i+1<len(list(self.students_frames.items()
+        #     if start==True:
+        #         next_row=self.students_frames[j]['label'].grid_info()["row"]
+        #         next_column=self.students_frames[j]['label'].grid_info()["column"]
+        #         label=self.students_frames[j]['label']
+
+        #         self.students_frames[j]['label'].grid(row=int(cur_row),column=int(cur_column),sticky='nsew')
+
+        #         cur_row=next_row
+        #         cur_column=next_column
+        #         last_label = label
+
+        #     if j==port:
+        #         start=True
+
+
+        
+        # del self.students_frames[port]
 
     def update_label(self, image,port):
         label = self.students_frames[port]["label"]

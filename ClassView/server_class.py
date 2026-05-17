@@ -21,6 +21,8 @@ class Server:
         self.students_frames={}
         self.teacher_frames={}
         self.chunk_size = 1300
+        self.timecheck=time.time()
+        # self.server_socket.settimeout(1)
 
     def recv_screenshot(self):
         logging.basicConfig(
@@ -30,7 +32,10 @@ class Server:
         )
         self.server_socket.bind(("0.0.0.0", 5000))
         while True:
-            data, addr = self.server_socket.recvfrom(65535)
+            try:
+                data, addr = self.server_socket.recvfrom(65535)
+            except ConnectionResetError:
+                continue
             if not self.TeacherIn and data==b"TEACHER":
                 self.TeacherIn=True
                 self.Teacheraddr=addr
@@ -38,7 +43,7 @@ class Server:
             elif data==b"STUDENT" and self.TeacherIn:
                 # name=data.decode().split(',')[1]
                 if addr not in self.students_frames:
-                    self.students_frames[addr] = {}
+                    self.students_frames[addr] = {'timeout':time.time(),'frames':{}}
 
             elif addr==self.Teacheraddr and len(self.students_frames)>0:
                 frame_number,packet_number,length,packet=data.split(b',',3)
@@ -78,23 +83,24 @@ class Server:
             
             elif addr in self.students_frames:
                 frame_number,packet_number,length,packet=data.split(b',',3)
-
+                
                 packet_number=int(packet_number.decode())
                 frame_number=int(frame_number.decode())
                 length=int(length.decode())
 
 
-                if frame_number not in self.students_frames[addr]:
-                    self.students_frames[addr][frame_number]={'packets': {}}
+                if frame_number not in self.students_frames[addr]['frames']:
+                    self.students_frames[addr]['frames'][frame_number]={'packets': {}}
+                    self.students_frames[addr]['timeout']=time.time()
 
 
-                self.students_frames[addr][frame_number]["packets"][packet_number] = packet
-                # self.students_frames[addr][frame_number]["last_update"]= time.time()
+                self.students_frames[addr]['frames'][frame_number]["packets"][packet_number] = packet
+                # self.students_frames[addr]['frames'][frame_number]["last_update"]= time.time()
                 # logging.info("add: "+str(addr)+": "+frame_number.__str__())
-                if(len(self.students_frames[addr][frame_number]["packets"])==length):
+                if(len(self.students_frames[addr]['frames'][frame_number]["packets"])==length):
                     image_data=b''
-                    for i in self.students_frames[addr][frame_number]["packets"]:
-                        image_data+=self.students_frames[addr][frame_number]["packets"][i]
+                    for i in self.students_frames[addr]['frames'][frame_number]["packets"]:
+                        image_data+=self.students_frames[addr]['frames'][frame_number]["packets"][i]
 
 
                     
@@ -108,11 +114,29 @@ class Server:
                         self.server_socket.sendto(packet,self.Teacheraddr)
 
                     # logging.info("delete: "+addr.__str__()+": "+frame_number.__str__())
-                    del self.students_frames[addr][frame_number]
+                    del self.students_frames[addr]['frames'][frame_number]
+                
+
+            if(time.time()-self.timecheck>5):
+                del_list=[]
+                for i in self.students_frames:
+                    if(time.time()-self.students_frames[i]['timeout']>1):
+                        print(1)
+                        _, student_port = i
+                        packet=(f'del,{student_port}')
+                        self.server_socket.sendto(packet.encode(),self.Teacheraddr)
+                        del_list.append(i)
+
+                if del_list:
+                    for i in del_list:
+                        del self.students_frames[i]
+                self.timecheck=time.time()
+
                 
                     # for i,j in self.students_frames:
                     #     if(time.time()-self.students_frames[i][j]["last_update"]>1.0):
                     #         del self.students_frames[i][j]
+
 
 server= Server(IP,PORT)
 server.recv_screenshot()

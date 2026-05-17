@@ -12,9 +12,21 @@ class StudentClient:
         self.client_socket=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.chunk_size = 1300
         self.root = tk.Tk()
+        # self.rootname=tk.Tk()
         self.label = tk.Label(self.root)
         self.frames={}
     
+    # def handle(self):
+    #     self.rootname.title("Student Screen")
+    #     self.root.geometry("1000x1000")
+    #     self.root.attributes("-fullscreen", False)
+    #     self.client_socket.sendto(f"STUDENT".encode(),self.SERVER_ADDR)
+    #     self.root.mainloop()
+    #     data, server_addr = self.client_socket.recvfrom(65535)
+    #     if
+
+        
+
     def handle(self):
         # name=input("Enter name: ")
         # self.client_socket.sendto(f"STUDENT,{name}".encode(),self.addr)
