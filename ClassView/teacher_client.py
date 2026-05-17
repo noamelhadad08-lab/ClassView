@@ -13,7 +13,7 @@ class TeacherClient:
         self.listen_port=listen_port
         self.root = tk.Tk()
         self.labels = []
-        self.addr = (server_ip, server_port)
+        self.server_addr = (server_ip, server_port)
         self.client_socket=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.students_frames={}
         self.chunk_size = 1300
@@ -40,7 +40,7 @@ class TeacherClient:
 
         
         self.client_socket.bind(('0.0.0.0',self.listen_port))
-        self.client_socket.sendto("TEACHER".encode(),self.addr)
+        self.client_socket.sendto("TEACHER".encode(),self.server_addr)
 
         t1 = threading.Thread(target=self.recv_screenshots)
         t2 = threading.Thread(target=self.send_screen_shot)
@@ -73,7 +73,7 @@ class TeacherClient:
                     chunk=data[start:end]
 
                     packet=(f'{frame_number},{i},{chunks_number},').encode()+chunk
-                    self.client_socket.sendto(packet,self.addr)
+                    self.client_socket.sendto(packet,self.server_addr)
 
                 time.sleep(0.1)
                 frame_number+=1
@@ -171,7 +171,7 @@ class TeacherClient:
 
 
 PORT = 5001
-SERVERIP='127.0.0.1'
+SERVERIP="192.168.68.63"
 SERVERPORT=5000
 teacher=TeacherClient(SERVERIP, PORT,SERVERPORT)
 teacher.handle()

@@ -12,7 +12,7 @@ PORT = 5000
 class Server:
 
     def __init__(self,IP,PORT):
-        self.Ip=IP
+        self.IP=IP
         self.PORT=PORT
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.lock = threading.Lock()
@@ -30,7 +30,7 @@ class Server:
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s'
         )
-        self.server_socket.bind(("0.0.0.0", 5000))
+        self.server_socket.bind((self.IP, self.PORT))
         while True:
             try:
                 data, addr = self.server_socket.recvfrom(65535)

@@ -103,5 +103,5 @@ class StudentClient:
         self.label.config(image=photo)  
         self.label.image = photo 
 
-student=StudentClient('127.0.0.1', 5000)
+student=StudentClient("192.168.68.63", 5000)
 student.handle()
