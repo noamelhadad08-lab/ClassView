@@ -17,12 +17,30 @@ class TeacherClient:
         self.client_socket=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.students_frames={}
         self.chunk_size = 1300
+        self.current_action='None'
+        self.heartbeat_stop_event = threading.Event()
+        self.listen_stop_event = threading.Event()
+        self.client_socket.settimeout(2)
+        self.Share_button=tk.Button(self.root)
+        self.Watch_button=tk.Button(self.root)
     
     def handle(self):
         self.root.title("Teacher Screen")
         # self.root.state("zoomed")
         self.root.geometry("1000x1000")
         self.root.attributes("-fullscreen", False)
+        
+        frame = tk.Frame(self.root)
+        frame.grid(row=5, column=0, columnspan=6, pady=20)
+
+        self.Share_button = tk.Button(frame, text="Share Window", command=self.Share)
+        self.Watch_button = tk.Button(frame, text="Watch Students", command=self.Watch)
+
+        self.Share_button.pack(side="left", padx=10)
+        self.Watch_button.pack(side="left", padx=10)
+        
+        # self.Share_button.config(state="disabled")
+        # self.Watch_button.config(state="disabled")
 
         for i in range(5):
             for j in range(6):
@@ -41,133 +59,198 @@ class TeacherClient:
         
         self.client_socket.bind(('0.0.0.0',self.listen_port))
         self.client_socket.sendto("TEACHER".encode(),self.server_addr)
+        
 
-        t1 = threading.Thread(target=self.recv_screenshots)
-        t2 = threading.Thread(target=self.send_screen_shot)
-        t1.start()
-        t2.start()
+        t = threading.Thread(target=self.send_heartbeat)
+        t.start()
+
+        t = threading.Thread(target=self.handle_packets)
+        t.start()
+
+
+        # self.Watch_loop()
+
+        # t1 = threading.Thread(target=self.update_data)
+        # t2 = threading.Thread(target=self.send_screen_shot)
+        # t1.start()
+        # t2.start()
         self.root.mainloop()
         
-
     
-    def send_screen_shot(self):
+    def Share(self):
+        self.current_action='Share'
+        time.sleep(0.1)
+        # time.sleep(0.2)
+        # self.root.after(0,self.Clear_labels)
+
+        self.Share_button.config(state="disabled")
+        self.Watch_button.config(state="normal")
+
+        self.heartbeat_stop_event.set()
+        self.client_socket.sendto('Share'.encode(),self.server_addr)
+        threading.Thread(target=self.Share_loop, daemon=True).start()
+
+    def Share_loop(self):
+        # btn.config(state="disabled")
         frame_number=0
         with mss.mss() as sct:
-            while True:
-                monitor = sct.monitors[1]
-                screenshot = sct.grab(monitor)
-
-                img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
-                img=img.resize((960, 540))
-
-                buffer = io.BytesIO()
-
-                img.save(buffer, format="JPEG", quality=50)
-
-                data= buffer.getvalue()
-                chunks_number=(len(data)+self.chunk_size-1)//self.chunk_size
-                for i in range(chunks_number):
-                    start=i*self.chunk_size
-                    end=start+self.chunk_size
-
-                    chunk=data[start:end]
-
-                    packet=(f'{frame_number},{i},{chunks_number},').encode()+chunk
-                    self.client_socket.sendto(packet,self.server_addr)
-
-                time.sleep(0.1)
+            while self.current_action=='Share':
+                self.send_screen_shot(sct,frame_number)
                 frame_number+=1
+                time.sleep(0.1)
+                
 
-    def recv_screenshots(self):
+
+    def send_screen_shot(self,sct,frame_number):
+    # frame_number=0
+    # with mss.mss() as sct:
+    #     while self.current_action=='Share':
+            monitor = sct.monitors[1]
+            screenshot = sct.grab(monitor)
+
+            img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
+            img=img.resize((960, 540))
+
+            buffer = io.BytesIO()
+
+            img.save(buffer, format="JPEG", quality=50)
+
+            data= buffer.getvalue()
+            chunks_number=(len(data)+self.chunk_size-1)//self.chunk_size
+            for i in range(chunks_number):
+                start=i*self.chunk_size
+                end=start+self.chunk_size
+
+                chunk=data[start:end]
+
+                packet=(f'{frame_number},{i},{chunks_number},').encode()+chunk
+                self.client_socket.sendto(packet,self.server_addr)
+
+            # time.sleep(0.1)
+            # frame_number+=1
+
+
+
+    def Watch(self):
+        self.Watch_button.config(state="disabled")
+        self.Share_button.config(state="normal")
+        self.current_action='Watch'
+        time.sleep(0.1)
+        self.client_socket.sendto('Watch'.encode(),self.server_addr)
+        if self.heartbeat_stop_event.is_set():
+            threading.Thread(target=self.send_heartbeat, daemon=True).start()
+        # threading.Thread(target=self.Watch_loop, daemon=True).start()
+
+        
+    
+    def handle_packets(self):
         while True:
-            data, server_addr = self.client_socket.recvfrom(65535)
-
-            if(data.split(b',')[0]==b'del'):
-                port=int(data.decode().split(',')[1])
-                self.root.after(0, self.handle_delete, port)
-            
+            try:
+                data, server_addr = self.client_socket.recvfrom(65535)
+            except socket.timeout:
                 continue
 
-            # if data[0:7]==b"STUDENT":
-            #     name=data.decode().split(',')[1]
+            if data==b'Studentsin':
+                self.Share_button.config(state="normal")
+                self.Watch_button.config(state="normal")
+
+
+            elif data==b'zerostudents':
+                self.current_action=b'None'
+                print(3)
+                # self.root.after(0,self.Clear_labels)
+                self.Share_button.config(state="disabled")
+                self.Watch_button.config(state="disabled")
+                if self.heartbeat_stop_event.is_set():
+                    threading.Thread(target=self.send_heartbeat, daemon=True).start()
+
+
+            elif(data.split(b',')[0]==b'del'):
+                port=int(data.decode().split(',')[1])
+
+                try:
+                    del self.students_frames[port]
+                    self.root.after(0, self.handle_delete)
+                except:
+                    continue
             
-            frame_number,packet_number,length,port,packet=data.split(b',',4)
-            port=int(port.decode())
+            
+            else:
 
-            if port not in self.students_frames:
-                self.students_frames[port] = {"label":self.labels[len(self.students_frames)]}
+                frame_number,packet_number,length,port,packet=data.split(b',',4)
+                port=int(port.decode())
 
-
-            packet_number=int(packet_number.decode())
-            frame_number=int(frame_number.decode())
-            length=int(length.decode()) 
-
-
-            if frame_number not in self.students_frames[port]:
-                self.students_frames[port][frame_number]={'packets': {}}
-
-            self.students_frames[port][frame_number]["packets"][packet_number] = packet
-
-            if(len(self.students_frames[port][frame_number]["packets"])==length):
-                image_data=b''
-                for i in self.students_frames[port][frame_number]["packets"]:
-                    image_data+=self.students_frames[port][frame_number]["packets"][i]
-
-                image = Image.open(io.BytesIO(image_data))
-                self.root.after(0, self.update_label, image,port)
-
-                del self.students_frames[port][frame_number]
+                if port not in self.students_frames:
+                    print(1)
+                    self.students_frames[port] = {"label":self.labels[len(self.students_frames)]}
 
 
-    def handle_delete(self, port):
-        # last_label.config(image="")
-        # last_label.image = None
-        del self.students_frames[port]
+                packet_number=int(packet_number.decode())
+                frame_number=int(frame_number.decode())
+                length=int(length.decode()) 
+
+
+                if frame_number not in self.students_frames[port]:
+                    self.students_frames[port][frame_number]={'packets': {}}
+
+                self.students_frames[port][frame_number]["packets"][packet_number] = packet
+
+                if(len(self.students_frames[port][frame_number]["packets"])==length):
+                    image_data=b''
+                    for i in self.students_frames[port][frame_number]["packets"]:
+                        image_data+=self.students_frames[port][frame_number]["packets"][i]
+
+                    image = Image.open(io.BytesIO(image_data))
+                    self.root.after(0, self.update_label, image,port)
+
+                    del self.students_frames[port][frame_number]
+                
+
+
+    def send_heartbeat(self):
+        self.heartbeat_stop_event.clear()
+        while not self.heartbeat_stop_event.is_set():
+            self.client_socket.sendto('alive'.encode(),self.server_addr)
+            time.sleep(0.3)
+    
+
+
+
+    def Clear_labels(self):
+        for i in range(len(self.labels)):
+            self.labels[i].config(image="")
+            self.labels[i].image = None
+
+
+    # def update_data(self,data):
+
         
+
+
+    def handle_delete(self):
+        print(8)
 
         for i,j in enumerate(self.students_frames):
             self.students_frames[j]["label"] = self.labels[i]
-            # self.students_frames[j]['label'].grid(row=int(self.labels[i].grid_info()["row"]),column=self.labels[i].grid_info()['column'])
-            
-
 
         self.labels[len(self.students_frames)].config(image="")
         self.labels[len(self.students_frames)].image = None
-        # start =False
 
-        # cur_row=self.students_frames[port]['label'].grid_info()["row"]
-        # cur_column=self.students_frames[port]['label'].grid_info()["column"]
-
-        # for i,j in enumerate(self.students_frames):
-        #     #and i+1<len(list(self.students_frames.items()
-        #     if start==True:
-        #         next_row=self.students_frames[j]['label'].grid_info()["row"]
-        #         next_column=self.students_frames[j]['label'].grid_info()["column"]
-        #         label=self.students_frames[j]['label']
-
-        #         self.students_frames[j]['label'].grid(row=int(cur_row),column=int(cur_column),sticky='nsew')
-
-        #         cur_row=next_row
-        #         cur_column=next_column
-        #         last_label = label
-
-        #     if j==port:
-        #         start=True
-
-
-        
-        # del self.students_frames[port]
 
     def update_label(self, image,port):
-        label = self.students_frames[port]["label"]
+        if self.current_action=='Watch':
+            label = self.students_frames[port]["label"]
 
-        w = max(label.winfo_width(), 50)
-        h = max(label.winfo_height(), 50)
+            w = max(label.winfo_width(), 50)
+            h = max(label.winfo_height(), 50)
 
-        image = image.resize((w, h))
-        photo = ImageTk.PhotoImage(image)
-        self.students_frames[port]["label"].config(image=photo)  
-        self.students_frames[port]["label"].image = photo 
+            image = image.resize((w, h))
+            photo = ImageTk.PhotoImage(image)
+            self.students_frames[port]["label"].config(image=photo)  
+            self.students_frames[port]["label"].image = photo 
+        else:
+            self.students_frames[port]["label"].config(image='')  
+            self.students_frames[port]["label"].image = None 
 
 
 PORT = 5001
