@@ -192,4 +192,4 @@ class Server:
 
 
 server= Server(IP,PORT)
-server.handle_screenshots()
+server.handle_packets()
