@@ -22,7 +22,7 @@ class Server:
         self.command=b'Share'
         # self.server_socket.settimeout(1)
 
-    def handle_screenshots(self):
+    def handle_packets(self):
         self.server_socket.bind((self.IP, self.PORT))
         while True:
             try:
